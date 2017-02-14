@@ -1,0 +1,96 @@
+#!/bin/sh
+#
+# eywa <summary>
+#
+# description: Starts and stops a single eywa instance on this system 
+#
+
+# Sets the default values for eywa variables used in this script
+GO="/home/ec2-user/.gvm/gos/go1.7.3/bin/go"
+GOPATH="/home/ec2-user/.gvm/pkgsets/go1.7.3/global"
+EYWA_HOME="${GOPATH}/bin"
+#LOG_DIR="${EYWA_HOME}/logs/development"
+#CONF_DIR="${EYWA_HOME}/configs"
+PID_DIR="${EYWA_HOME}/tmp/pids"
+
+exec="${EYWA_HOME}/eywa"
+prog="eywa_development"
+pidfile="$PID_DIR/${prog}.pid"
+
+if [ -f /etc/rc.d/init.d/functions ]; then
+    . /etc/rc.d/init.d/functions
+fi
+
+checkGo() {
+    RC=`$GO version | grep -c 1.7.3`
+    if [ "$RC" != 1 ]; then
+        echo "Could not find Go1.7.3"
+        exit 1
+    fi
+}
+
+start() {
+    checkGo
+    [ -x $exec ] || exit 5
+    # Ensure that the PID_DIR exists (it is cleaned at OS startup time)
+    if [ -n "$PID_DIR" ] && [ ! -e "$PID_DIR" ]; then
+        mkdir -p "$PID_DIR"
+    fi
+    if [ -n "$pidfile" ] && [ ! -e "$pidfile" ]; then
+        touch "$pidfile"
+    fi
+
+    echo -n $"Starting $prog: "
+    # if not running, start it up here, usually something like "daemon $exec"
+    export EYWA_HOME=${EYWA_HOME}
+    $exec serve &
+    echo $! > $pidfile
+    retval=$?
+    echo "[OK]"
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    # stop it here, often "killproc $prog"
+    killproc -p $pidfile -d 86400 $prog
+    retval=$?
+    echo
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+rh_status() {
+    # run checks to determine if the service is running or use generic status
+    status -p $pidfile $prog
+}
+
+rh_status_q() {
+    rh_status >/dev/null 2>&1
+}
+
+
+case "$1" in
+    start)
+        rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    status)
+        rh_status
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart}"
+        exit 2
+esac
+exit $?
